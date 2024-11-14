@@ -36,5 +36,5 @@ print(predictions_df)
 
 # Optionally, save predictions to a new CSV file
 today = pd.Timestamp("today").strftime("%Y-%m-%d")
-predictions_df.to_csv(f"{today}_predictions.csv", index=False)
+predictions_df.to_csv(f"./Predictions/{today}_predictions.csv", index=False)
 print(f"Predicted data saved to {today}_predictions.csv.")
