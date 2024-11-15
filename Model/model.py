@@ -1,40 +1,85 @@
 import pandas as pd
 from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_absolute_error
+from datetime import datetime
 
-# Load the training and testing data
-df_train = pd.read_csv("rolling_averages.csv")
-df_test = pd.read_csv("testing.csv")
+# Load main data
+player_df = pd.read_csv("player_boxscores.csv")
+team_df = pd.read_csv("team_advanced_stats.csv")
 
-# Drop rows with missing values in the training dataset (optional: could fill with mean/median values)
-df_train = df_train.dropna()
+# Load today's matchups
+today_date = datetime.today().strftime('%Y-%m-%d')
+matchups_df = pd.read_csv(f"{today_date}_matchups.csv")
 
-# Separate features and target for training data
-X_train = df_train.drop(columns=["Date", "Team_home", "Team_away", "Point_diff"])
-y_train = df_train["Point_diff"]
+# Check if 'Date' column is present in team_df; if not, add it for consistency with player_df
+if 'Date' not in team_df.columns:
+    team_df['Date'] = today_date  # Assume each row applies to today's date for team stats
 
-# Use only the features from the testing data
-X_test = df_test.drop(columns=["Date", "Team_home", "Team_away"])
+# Merge team stats with player data to create training data
+player_df = player_df.merge(
+    team_df.add_suffix('_team'),
+    left_on=['Team', 'Season', 'Date'],
+    right_on=['Team_team', 'Season_team', 'Date_team'],
+    how='inner'  # Use 'inner' to ensure we only keep matched data
+).merge(
+    team_df.add_suffix('_opp'),
+    left_on=['Opponent', 'Season', 'Date'],
+    right_on=['Team_opp', 'Season_opp', 'Date_opp'],
+    how='inner'
+)
 
-# Initialize and train the model
-model = GradientBoostingRegressor(random_state=42)
+# Select features and target variable for training data
+features = player_df[
+    ['Minutes', 'FG%', '3P%', 'FT%', 'AST', 'TO', 'REB', 'SPI',
+     'OffRtg_team', 'PACE_team', 'eFG%_team', 'DefRtg_opp', 'DREB%_opp']
+]
+target = player_df['Points']
+
+# Train-test split for evaluation
+X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+
+# Train model
+model = GradientBoostingRegressor()
 model.fit(X_train, y_train)
 
-# Make predictions on the testing data
+# Predict and evaluate on test data
 y_pred = model.predict(X_test)
+mae = mean_absolute_error(y_test, y_pred)
+print(f"Mean Absolute Error on test data: {mae}")
 
-# Create a DataFrame to display predicted point differentials for each matchup
-predictions_df = pd.DataFrame({
-    "Date": df_test["Date"],
-    "Team_home": df_test["Team_home"],
-    "Team_away": df_test["Team_away"],
-    "Predicted_Point_diff": y_pred
-})
+# --- Create Testing Data for Today's Matchups ---
 
-# Display the predictions
-print("\nPredicted Point Differentials for Today's Matchups:")
-print(predictions_df)
+# Filter player and team data to include only rows relevant to today's matchups
+today_player_data = player_df[
+    (player_df['Date'] == today_date) &
+    (player_df['Team'].isin(matchups_df['Team_home']) | player_df['Team'].isin(matchups_df['Team_away']))
+]
 
-# Optionally, save predictions to a new CSV file
-today = pd.Timestamp("today").strftime("%Y-%m-%d")
-predictions_df.to_csv(f"./Predictions/{today}_predictions.csv", index=False)
-print(f"Predicted data saved to {today}_predictions.csv.")
+# Merge today’s player data with team stats for today’s testing set
+today_data = today_player_data.merge(
+    team_df.add_suffix('_team'),
+    left_on=['Team', 'Season', 'Date'],
+    right_on=['Team_team', 'Season_team', 'Date_team'],
+    how='inner'
+).merge(
+    team_df.add_suffix('_opp'),
+    left_on=['Opponent', 'Season', 'Date'],
+    right_on=['Team_opp', 'Season_opp', 'Date_opp'],
+    how='inner'
+)
+
+# Select features for today's predictions
+today_features = today_data[
+    ['Minutes', 'FG%', '3P%', 'FT%', 'AST', 'TO', 'REB', 'SPI',
+     'OffRtg_team', 'PACE_team', 'eFG%_team', 'DefRtg_opp', 'DREB%_opp']
+]
+
+# Predict points for today's matchups
+today_predictions = model.predict(today_features)
+today_data['Predicted_Points'] = today_predictions
+
+# Save today's predictions to a CSV file
+output_file = f"{today_date}_predictions.csv"
+today_data[['Player', 'Team', 'Opponent', 'Date', 'Predicted_Points']].to_csv(output_file, index=False)
+print(f"Predictions for today's matchups saved to {output_file}")

@@ -74,6 +74,7 @@ def main():
     # Combine all DataFrames into one and save to a CSV
     df_combined = pd.concat(dfs)
     df_combined = df_combined.rename(columns=lambda x: x.strip())
+    df_combined.drop([''])
        
     # Convert 'Date' column to datetime format
     df_combined['Date'] = pd.to_datetime(df_combined['Date'])
