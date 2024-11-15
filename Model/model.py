@@ -1,5 +1,8 @@
 import pandas as pd
-from sklearn.ensemble import GradientBoostingRegressor
+from sklearn.svm import NuSVR
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
 
 # Load the training and testing data
 df_train = pd.read_csv("rolling_averages.csv")
@@ -15,12 +18,23 @@ y_train = df_train["Point_diff"]
 # Use only the features from the testing data
 X_test = df_test.drop(columns=["Date", "Team_home", "Team_away"])
 
-# Initialize and train the model
-model = GradientBoostingRegressor(random_state=42)
-model.fit(X_train, y_train)
+regr = make_pipeline(
+    StandardScaler(),
+    NuSVR(C=10, nu=.9, gamma="scale")
+)
 
-# Make predictions on the testing data
-y_pred = model.predict(X_test)
+# param_grid = {
+#     'nusvr__C': [0.1, 1, 10],
+#     'nusvr__nu': [0.1, 0.5, 0.9],
+#     'nusvr__gamma': ['scale', 'auto']
+# }
+
+# grid_search = GridSearchCV(regr, param_grid, cv=5)
+# grid_search.fit(X_train, y_train)
+# print("Best parameters:", grid_search.best_params_)
+
+regr.fit(X_train, y_train) 
+y_pred = regr.predict(X_test)
 
 # Create a DataFrame to display predicted point differentials for each matchup
 predictions_df = pd.DataFrame({
